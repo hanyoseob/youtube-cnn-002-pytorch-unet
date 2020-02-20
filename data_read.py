@@ -5,7 +5,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 ##
-dir_dataset = './datasets'
+dir_dataset = './dataset'
 
 name_label = 'train-labels.tif'
 name_input = 'train-volume.tif'

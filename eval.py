@@ -9,17 +9,21 @@ from torch.utils.tensorboard import SummaryWriter
 
 from torchvision import transforms, datasets
 
+import matplotlib.pyplot as plt
+
 ## 트레이닝 파라메터를 설정하기
 lr = 1e-3
 batch_size = 4
 num_epoch = 100
 
-num_freq_disp = 1
+num_freq_disp = 10
 num_freq_save = 5
 
 data_dir = './dataset/'
 ckpt_dir = './checkpoint/'
 log_dir = './log/'
+
+result_dir = './result/'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -265,11 +269,11 @@ def save(ckpt_dir, net, optim, epoch):
     print('model_epoch%d.pth is saved.' % epoch)
 
 def load(ckpt_dir, net, optim):
-    if not os.path.exists(ckpt_dir):
+    ckpt_lst = os.listdir(ckpt_dir)
+
+    if not ckpt_lst:
         epoch = 0
         return net, optim, epoch
-
-    ckpt_lst = os.listdir(ckpt_dir)
 
     ckpt_lst.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
 
@@ -283,20 +287,43 @@ def load(ckpt_dir, net, optim):
 
     return net, optim, epoch
 
+def append_index(dir_result, fileset, step=False):
+    index_path = os.path.join(dir_result, "index.html")
+    if os.path.exists(index_path):
+        index = open(index_path, "a")
+    else:
+        index = open(index_path, "w")
+        index.write("<html><body><table><tr>")
+    if step:
+        index.write("<th>step</th>")
+    for key, value in fileset.items():
+        index.write("<th>%s</th>" % key)
+    index.write('</tr>')
+
+    # for fileset in filesets:
+    index.write("<tr>")
+
+    if step:
+        index.write("<td>%d</td>" % fileset["step"])
+    index.write("<td>%s</td>" % fileset["name"])
+
+    del fileset['name']
+
+    for key, value in fileset.items():
+        index.write("<td><img src='images/%s'></td>" % value)
+
+    index.write("</tr>")
+    return index_path
+
 ## 학습 시킬 데이터를 불러오기
-transform = transforms.Compose([Normalize(mean=0.5, std=0.5), RandomCrop((256, 256)), ToTensor()])
+# transform = transforms.Compose([Normalize(mean=0.5, std=0.5), RandomCrop((256, 256)), ToTensor()])
+transform = transforms.Compose([Normalize(mean=0.5, std=0.5), ToTensor()])
 
-dataset_train = Dataset(data_dir=os.path.join(data_dir, 'train'), nch=1, transform=transform)
-loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=0)
+dataset_test = Dataset(data_dir=os.path.join(data_dir, 'train'), nch=1, transform=transform)
+loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=True, num_workers=0)
 
-dataset_val = Dataset(data_dir=os.path.join(data_dir, 'val'), nch=1, transform=transform)
-loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=True, num_workers=0)
-
-num_data_train = len(loader_train.dataset)
-num_batch_train = round(num_data_train / batch_size)
-
-num_data_val = len(loader_val.dataset)
-num_batch_val = round(num_data_val / batch_size)
+num_data_test = len(loader_test.dataset)
+num_batch_test = round(num_data_test / batch_size)
 
 ## 네트워크를 생성하기
 net = UNet().to(device)
@@ -311,24 +338,21 @@ fn_class = lambda x: 1.0 * (x > 0.5)
 
 optim = torch.optim.Adam(params, lr=lr)
 
-writer_train = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
-writer_val = SummaryWriter(log_dir=os.path.join(log_dir, 'val'))
-
 st_epoch = 0
 net, optim, st_epoch = load(ckpt_dir=ckpt_dir, net=net, optim=optim)
 
-## 트레이닝을 시작하기
-for epoch in range(st_epoch + 1, num_epoch + 1):
-    def should_save(freq):
-        return freq > 0 and (epoch % freq == 0 or epoch == num_epoch)
+if not os.path.exists(result_dir):
+    os.makedirs(result_dir)
 
-    # train phase
-    net.train()
+## 트레이닝을 시작하기
+# evaluation phase
+with torch.no_grad():
+    net.eval()
     loss_arr = []
 
-    for batch, data in enumerate(loader_train, 1):
+    for batch, data in enumerate(loader_test, 1):
         def should_disp(freq):
-            return freq > 0 and (batch % freq == 0 or batch == num_batch_train)
+            return freq > 0 and (batch % freq == 0 or batch == num_batch_test)
 
         # forward propagation 하기
         label = data['label'].to(device)
@@ -337,79 +361,39 @@ for epoch in range(st_epoch + 1, num_epoch + 1):
         output = net(input)
 
         # backward propagation 하기
-        optim.zero_grad()
+        # optim.zero_grad()
 
         loss = fn_loss(output, label)
-        loss.backward()
+        # loss.backward()
 
-        optim.step()
+        # optim.step()
 
         # 손실함수를 계산하기
         loss_arr += [loss.item()]
 
         if should_disp(num_freq_disp):
-            print('TRAIN: EPOCH %d/%d | BATCH %04d/%04d | LOSS: %.4f' %
-                  (epoch, num_epoch, batch, num_batch_train, np.mean(loss_arr)))
+            print('TEST: BATCH %04d/%04d | LOSS: %.4f' % (batch, num_batch_test, np.mean(loss_arr)))
 
         label = fn_tonumpy(label)
         input = fn_tonumpy(fn_denorm(input))
         output = fn_tonumpy(fn_class(output))
 
-        writer_train.add_images('input', input, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-        writer_train.add_images('label', label, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-        writer_train.add_images('output', output, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+        for i in range(label.shape[0]):
+            name = batch_size * (batch - 1) + i
 
-    # log 를 저장하기
-    writer_train.add_scalar('loss', np.mean(loss_arr), epoch)
+            fileset = {'name': name,
+                      'label': 'label-%04d.png' % name,
+                      'input': 'input-%04d.png' % name,
+                      'output': 'output-%04d.png' % name}
 
-    print('----------------------------------------------------')
+            label_ = label[i, :, :, :].squeeze()
+            input_ = input[i, :, :, :].squeeze()
+            output_ = output[i, :, :, :].squeeze()
+            result_ = np.concatenate((input_, label_, output_), axis=1)
 
-    # evaluation phase
-    with torch.no_grad():
-        net.eval()
-        loss_arr = []
+            plt.imsave(os.path.join(result_dir, fileset['label']), label_, cmap='gray')
+            plt.imsave(os.path.join(result_dir, fileset['input']), input_, cmap='gray')
+            plt.imsave(os.path.join(result_dir, fileset['output']), output_, cmap='gray')
+            plt.imsave(os.path.join(result_dir, 'result-%04d.png' % name), result_, cmap='gray')
 
-        for batch, data in enumerate(loader_val, 1):
-            def should_disp(freq):
-                return freq > 0 and (batch % freq == 0 or batch == num_batch_val)
-
-            # forward propagation 하기
-            label = data['label'].to(device)
-            input = data['input'].to(device)
-
-            output = net(input)
-
-            # backward propagation 하기
-            # optim.zero_grad()
-
-            loss = fn_loss(output, label)
-            # loss.backward()
-
-            # optim.step()
-
-            # 손실함수를 계산하기
-            loss_arr += [loss.item()]
-
-            if should_disp(num_freq_disp):
-                print('VALID: EPOCH %d/%d | BATCH %04d/%04d | LOSS: %.4f' %
-                      (epoch, num_epoch, batch, num_batch_val, np.mean(loss_arr)))
-
-            label = fn_tonumpy(label)
-            input = fn_tonumpy(fn_denorm(input))
-            output = fn_tonumpy(fn_class(output))
-
-            writer_val.add_images('input', input, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
-            writer_val.add_images('label', label, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
-            writer_val.add_images('output', output, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
-
-    # log 를 저장하기
-    writer_val.add_scalar('loss', np.mean(loss_arr), epoch)
-
-    print('----------------------------------------------------')
-
-    # 네트워크를 저장하기
-    if should_save(num_freq_save):
-        save(ckpt_dir=ckpt_dir, net=net, optim=optim, epoch=epoch)
-
-writer_train.close()
-writer_val.close()
+            append_index(result_dir, fileset)
