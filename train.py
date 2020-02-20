@@ -14,12 +14,9 @@ lr = 1e-3
 batch_size = 4
 num_epoch = 100
 
-num_freq_disp = 1
-num_freq_save = 5
-
-data_dir = './dataset/'
-ckpt_dir = './checkpoint/'
-log_dir = './log/'
+data_dir = './dataset'
+ckpt_dir = './checkpoint'
+log_dir = './log'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -34,56 +31,56 @@ class UNet(nn.Module):
                                  kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)]
             layers += [nn.BatchNorm2d(num_features=out_channels)]
             layers += [nn.ReLU()]
+
             cbr = nn.Sequential(*layers)
+
             return cbr
 
         # Encoder part
-        self.enc1_1 = CBR2d(in_channels=1, out_channels=64, kernel_size=3, stride=1, padding=1, bias=True)
-        self.enc1_2 = CBR2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, bias=True)
+        self.enc1_1 = CBR2d(in_channels=1, out_channels=64)
+        self.enc1_2 = CBR2d(in_channels=64, out_channels=64)
 
         self.pool1 = nn.MaxPool2d(kernel_size=2)
 
-        self.enc2_1 = CBR2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1, bias=True)
-        self.enc2_2 = CBR2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, bias=True)
+        self.enc2_1 = CBR2d(in_channels=64, out_channels=128)
+        self.enc2_2 = CBR2d(in_channels=128, out_channels=128)
 
         self.pool2 = nn.MaxPool2d(kernel_size=2)
 
-        self.enc3_1 = CBR2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1, bias=True)
-        self.enc3_2 = CBR2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, bias=True)
+        self.enc3_1 = CBR2d(in_channels=128, out_channels=256)
+        self.enc3_2 = CBR2d(in_channels=256, out_channels=256)
 
         self.pool3 = nn.MaxPool2d(kernel_size=2)
 
-        self.enc4_1 = CBR2d(in_channels=256, out_channels=512, kernel_size=3, stride=1, padding=1, bias=True)
-        self.enc4_2 = CBR2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1, bias=True)
+        self.enc4_1 = CBR2d(in_channels=256, out_channels=512)
+        self.enc4_2 = CBR2d(in_channels=512, out_channels=512)
 
         self.pool4 = nn.MaxPool2d(kernel_size=2)
 
-        self.enc5_1 = CBR2d(in_channels=512, out_channels=1024, kernel_size=3, stride=1, padding=1, bias=True)
+        self.enc5_1 = CBR2d(in_channels=512, out_channels=1024)
 
         # Decoder part
-        self.dec5_1 = CBR2d(in_channels=1024, out_channels=512, kernel_size=3, stride=1, padding=1, bias=True)
+        self.dec5_1 = CBR2d(in_channels=1024, out_channels=512)
 
-        # self.unpool4 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         self.unpool4 = nn.ConvTranspose2d(in_channels=512, out_channels=512, kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec4_2 = CBR2d(in_channels=1024, out_channels=512, kernel_size=3, stride=1, padding=1, bias=True)
-        self.dec4_1 = CBR2d(in_channels=512, out_channels=256, kernel_size=3, stride=1, padding=1, bias=True)
+        self.dec4_2 = CBR2d(in_channels=2*512, out_channels=512)
+        self.dec4_1 = CBR2d(in_channels=512, out_channels=256)
 
         self.unpool3 = nn.ConvTranspose2d(in_channels=256, out_channels=256, kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec3_2 = CBR2d(in_channels=512, out_channels=256, kernel_size=3, stride=1, padding=1, bias=True)
-        self.dec3_1 = CBR2d(in_channels=256, out_channels=128, kernel_size=3, stride=1, padding=1, bias=True)
+        self.dec3_2 = CBR2d(in_channels=2*256, out_channels=256)
+        self.dec3_1 = CBR2d(in_channels=256, out_channels=128)
 
         self.unpool2 = nn.ConvTranspose2d(in_channels=128, out_channels=128, kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec2_2 = CBR2d(in_channels=256, out_channels=128, kernel_size=3, stride=1, padding=1, bias=True)
-        self.dec2_1 = CBR2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1, bias=True)
+        self.dec2_2 = CBR2d(in_channels=2*128, out_channels=128)
+        self.dec2_1 = CBR2d(in_channels=128, out_channels=64)
 
         self.unpool1 = nn.ConvTranspose2d(in_channels=64, out_channels=64, kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec1_2 = CBR2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1, bias=True)
-        self.dec1_1 = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=3, stride=1, padding=1, bias=True)
-
+        self.dec1_2 = CBR2d(in_channels=2*64, out_channels=64)
+        self.dec1_1 = CBR2d(in_channels=64, out_channels=1)
 
     def forward(self, x):
         enc1_1 = self.enc1_1(x)
@@ -132,21 +129,23 @@ class UNet(nn.Module):
 
 ## 데이터 로더를 구축하기
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, nch=1, transform=None):
+    def __init__(self, data_dir, transform=None):
         self.data_dir = data_dir
-        self.nch = nch
         self.transform = transform
 
-        lst_data = os.listdir(data_dir)
+        lst_data = os.listdir(self.data_dir)
 
         lst_label = [f for f in lst_data if f.startswith('label')]
         lst_input = [f for f in lst_data if f.startswith('input')]
 
         lst_label.sort()
-        lst_label.sort()
+        lst_input.sort()
 
         self.lst_label = lst_label
         self.lst_input = lst_input
+
+    def __len__(self):
+        return len(self.lst_label)
 
     def __getitem__(self, index):
         label = np.load(os.path.join(self.data_dir, self.lst_label[index]))
@@ -168,10 +167,7 @@ class Dataset(torch.utils.data.Dataset):
 
         return data
 
-    def __len__(self):
-        return len(self.lst_label)
-
-## User-defined transform functions
+## 트렌스폼을 구축하기
 class ToTensor(object):
     def __call__(self, data):
         label, input = data['label'], data['input']
@@ -182,10 +178,12 @@ class ToTensor(object):
         data = {'label': torch.from_numpy(label), 'input': torch.from_numpy(input)}
         return data
 
+
 class ToNumpy(object):
-  def __call__(self, data):
-    data = data.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
-    return data
+    def __call__(self, data):
+        data = data.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
+        return data
+
 
 class Normalize(object):
     def __init__(self, mean=0.5, std=0.5):
@@ -195,11 +193,11 @@ class Normalize(object):
     def __call__(self, data):
         label, input = data['label'], data['input']
 
-        # label = (label - self.mean)/self.std
-        input = (input - self.mean)/self.std
+        input = (input - self.mean) / self.std
 
         data = {'label': label, 'input': input}
         return data
+
 
 class Denormalize(object):
     def __init__(self, mean=0.5, std=0.5):
@@ -207,25 +205,19 @@ class Denormalize(object):
         self.std = std
 
     def __call__(self, data):
-        # label, input = data['label'], data['input']
-
-        # label = (label - self.mean)/self.std
-        # input = (input - self.mean)/self.std
-
         data = (data * self.std) + self.mean
-
-        # data = {'label': label, 'input': input}
         return data
 
+
 class RandomCrop(object):
-    def __init__(self, output_size):
-        self.output_size = output_size
+    def __init__(self, patch_size):
+        self.patch_size = patch_size
 
     def __call__(self, data):
         label, input = data['label'], data['input']
 
-        h, w = input.shape[:2]
-        new_h, new_w = self.output_size
+        h, w = label.shape[:2]
+        new_h, new_w = self.patch_size
 
         top = np.random.randint(0, h - new_h)
         left = np.random.randint(0, w - new_w)
@@ -239,30 +231,30 @@ class RandomCrop(object):
         data = {'label': label, 'input': input}
         return data
 
+
 class RandomFlip(object):
-  def __call__(self, data):
-    label, input = data['label'], data['input']
+    def __call__(self, data):
+        label, input = data['label'], data['input']
 
-    if np.random.rand() > 0.5:
-      label = np.fliplr(label)
-      input = np.flip.lr(input)
+        if np.random.rand() > 0.5:
+            label = np.fliplr(label)
+            input = np.fliplr(input)
 
-    if np.random.rand() > 0.5:
-      label = np.flipud(label)
-      input = np.flipud(input)
+        if np.random.rand() > 0.5:
+            label = np.flipud(label)
+            input = np.flipud(input)
 
-    data  = {'label': label, 'input': input}
-    return data
+        data = {'label': label, 'input': input}
+        return data
 
-## 네트워크를 저장하거나 불러오는 함수 작성하기
+
+## 네트워크를 저장하거나 불러오는 함수를 구축하기
 def save(ckpt_dir, net, optim, epoch):
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
 
     torch.save({'net': net.state_dict(), 'optim': optim.state_dict()},
-               './%s/model_epoch%d.pth' % (ckpt_dir, epoch))
-
-    print('model_epoch%d.pth is saved.' % epoch)
+                './%s/model_epoch%d.pth' % (ckpt_dir, epoch))
 
 def load(ckpt_dir, net, optim):
     if not os.path.exists(ckpt_dir):
@@ -279,30 +271,28 @@ def load(ckpt_dir, net, optim):
     optim.load_state_dict(dict_model['optim'])
     epoch = int(ckpt_lst[-1].split('epoch')[1].split('.pth')[0])
 
-    print('%s is loaded.' % ckpt_lst[-1])
-
     return net, optim, epoch
 
 ## 학습 시킬 데이터를 불러오기
 transform = transforms.Compose([Normalize(mean=0.5, std=0.5), RandomCrop((256, 256)), ToTensor()])
 
-dataset_train = Dataset(data_dir=os.path.join(data_dir, 'train'), nch=1, transform=transform)
+dataset_train = Dataset(data_dir=os.path.join(data_dir, 'train'), transform=transform)
 loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=0)
 
-dataset_val = Dataset(data_dir=os.path.join(data_dir, 'val'), nch=1, transform=transform)
+dataset_val = Dataset(data_dir=os.path.join(data_dir, 'val'), transform=transform)
 loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=True, num_workers=0)
 
-num_data_train = len(loader_train.dataset)
-num_batch_train = round(num_data_train / batch_size)
+num_data_train = len(dataset_train)
+num_batch_train = np.ceil(num_data_train / batch_size)
 
-num_data_val = len(loader_val.dataset)
-num_batch_val = round(num_data_val / batch_size)
+num_data_val = len(dataset_val)
+num_batch_val = np.ceil(num_data_val / batch_size)
 
 ## 네트워크를 생성하기
 net = UNet().to(device)
 params = net.parameters()
 
-## 손실함수 등을 설정하기
+## 손실함수를 정의하기
 fn_loss = nn.BCELoss().to(device)
 
 fn_tonumpy = ToNumpy()
@@ -314,29 +304,23 @@ optim = torch.optim.Adam(params, lr=lr)
 writer_train = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
 writer_val = SummaryWriter(log_dir=os.path.join(log_dir, 'val'))
 
+## 학습된 네트워크를 불러오기
 st_epoch = 0
 net, optim, st_epoch = load(ckpt_dir=ckpt_dir, net=net, optim=optim)
 
 ## 트레이닝을 시작하기
 for epoch in range(st_epoch + 1, num_epoch + 1):
-    def should_save(freq):
-        return freq > 0 and (epoch % freq == 0 or epoch == num_epoch)
-
-    # train phase
     net.train()
     loss_arr = []
 
     for batch, data in enumerate(loader_train, 1):
-        def should_disp(freq):
-            return freq > 0 and (batch % freq == 0 or batch == num_batch_train)
-
-        # forward propagation 하기
+        # forward pass
         label = data['label'].to(device)
         input = data['input'].to(device)
 
         output = net(input)
 
-        # backward propagation 하기
+        # backward pass
         optim.zero_grad()
 
         loss = fn_loss(output, label)
@@ -344,42 +328,36 @@ for epoch in range(st_epoch + 1, num_epoch + 1):
 
         optim.step()
 
-        # 손실함수를 계산하기
+        # 손실함수 계산
         loss_arr += [loss.item()]
 
-        if should_disp(num_freq_disp):
-            print('TRAIN: EPOCH %d/%d | BATCH %04d/%04d | LOSS: %.4f' %
-                  (epoch, num_epoch, batch, num_batch_train, np.mean(loss_arr)))
+        print('TRAIN: EPOCH %04d/%04d | BATCH %04d/%04d | LOSS %.4f' %
+              (epoch, num_epoch, batch, num_batch_train, np.mean(loss_arr)))
 
         label = fn_tonumpy(label)
         input = fn_tonumpy(fn_denorm(input))
         output = fn_tonumpy(fn_class(output))
 
-        writer_train.add_images('input', input, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-        writer_train.add_images('label', label, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-        writer_train.add_images('output', output, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+        writer_train.add_image('label', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+        writer_train.add_image('input', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+        writer_train.add_image('output', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
 
-    # log 를 저장하기
     writer_train.add_scalar('loss', np.mean(loss_arr), epoch)
 
-    print('----------------------------------------------------')
+    print('------------------------------------------------------')
 
-    # evaluation phase
     with torch.no_grad():
         net.eval()
         loss_arr = []
 
         for batch, data in enumerate(loader_val, 1):
-            def should_disp(freq):
-                return freq > 0 and (batch % freq == 0 or batch == num_batch_val)
-
-            # forward propagation 하기
+            # forward pass
             label = data['label'].to(device)
             input = data['input'].to(device)
 
             output = net(input)
 
-            # backward propagation 하기
+            # backward pass
             # optim.zero_grad()
 
             loss = fn_loss(output, label)
@@ -387,29 +365,25 @@ for epoch in range(st_epoch + 1, num_epoch + 1):
 
             # optim.step()
 
-            # 손실함수를 계산하기
+            # 손실함수 계산
             loss_arr += [loss.item()]
 
-            if should_disp(num_freq_disp):
-                print('VALID: EPOCH %d/%d | BATCH %04d/%04d | LOSS: %.4f' %
-                      (epoch, num_epoch, batch, num_batch_val, np.mean(loss_arr)))
+            print('VALID: EPOCH %04d/%04d | BATCH %04d/%04d | LOSS %.4f' %
+                  (epoch, num_epoch, batch, num_batch_train, np.mean(loss_arr)))
 
             label = fn_tonumpy(label)
             input = fn_tonumpy(fn_denorm(input))
             output = fn_tonumpy(fn_class(output))
 
-            writer_val.add_images('input', input, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
-            writer_val.add_images('label', label, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
-            writer_val.add_images('output', output, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
+            writer_val.add_image('label', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+            writer_val.add_image('input', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+            writer_val.add_image('output', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
 
-    # log 를 저장하기
     writer_val.add_scalar('loss', np.mean(loss_arr), epoch)
 
-    print('----------------------------------------------------')
+    print('------------------------------------------------------')
 
-    # 네트워크를 저장하기
-    if should_save(num_freq_save):
-        save(ckpt_dir=ckpt_dir, net=net, optim=optim, epoch=epoch)
+    save(ckpt_dir=ckpt_dir, net=net, optim=optim, epoch=epoch)
 
 writer_train.close()
 writer_val.close()
