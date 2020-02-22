@@ -80,7 +80,7 @@ class UNet(nn.Module):
         self.unpool1 = nn.ConvTranspose2d(in_channels=64, out_channels=64, kernel_size=2, stride=2, padding=0, bias=True)
 
         self.dec1_2 = CBR2d(in_channels=2*64, out_channels=64)
-        self.dec1_1 = CBR2d(in_channels=64, out_channels=1)
+        self.dec1_1 = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=3, stride=1, padding=1, bias=True)
 
     def forward(self, x):
         enc1_1 = self.enc1_1(x)
@@ -338,9 +338,9 @@ for epoch in range(st_epoch + 1, num_epoch + 1):
         input = fn_tonumpy(fn_denorm(input))
         output = fn_tonumpy(fn_class(output))
 
-        writer_train.add_image('label', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-        writer_train.add_image('input', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-        writer_train.add_image('output', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+        writer_train.add_image('label', label, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+        writer_train.add_image('input', input, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+        writer_train.add_image('output', output, num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
 
     writer_train.add_scalar('loss', np.mean(loss_arr), epoch)
 
@@ -369,15 +369,15 @@ for epoch in range(st_epoch + 1, num_epoch + 1):
             loss_arr += [loss.item()]
 
             print('VALID: EPOCH %04d/%04d | BATCH %04d/%04d | LOSS %.4f' %
-                  (epoch, num_epoch, batch, num_batch_train, np.mean(loss_arr)))
+                  (epoch, num_epoch, batch, num_batch_val, np.mean(loss_arr)))
 
             label = fn_tonumpy(label)
             input = fn_tonumpy(fn_denorm(input))
             output = fn_tonumpy(fn_class(output))
 
-            writer_val.add_image('label', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-            writer_val.add_image('input', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
-            writer_val.add_image('output', num_batch_train * (epoch - 1) + batch, dataformats='NHWC')
+            writer_val.add_image('label', label, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
+            writer_val.add_image('input', input, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
+            writer_val.add_image('output', output, num_batch_val * (epoch - 1) + batch, dataformats='NHWC')
 
     writer_val.add_scalar('loss', np.mean(loss_arr), epoch)
 
