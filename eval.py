@@ -1,4 +1,4 @@
-## 라이브러리를 추가하기
+## 라이브러리 추가하기
 import os
 import numpy as np
 
@@ -7,26 +7,32 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from torchvision import transforms, datasets
-
 import matplotlib.pyplot as plt
 
-## 트레이닝 파라메터를 설정하기
+from torchvision import transforms, datasets
+
+## 트레이닝 파라메터 설정하기
 lr = 1e-3
 batch_size = 4
 num_epoch = 100
 
-data_dir = './dataset'
-ckpt_dir = './checkpoint'
-log_dir = './log'
-result_dir = './result'
+# data_dir = './datasets'
+# ckpt_dir = './checkpoint'
+# log_dir = './log'
+# result_dir = './results'
+
+data_dir = './drive/My Drive/YouTube/youtube-002-pytorch-unet/datasets'
+ckpt_dir = './drive/My Drive/YouTube/youtube-002-pytorch-unet/checkpoint'
+log_dir = './drive/My Drive/YouTube/youtube-002-pytorch-unet/log'
+result_dir = './drive/My Drive/YouTube/youtube-002-pytorch-unet/results'
+
+if not os.path.exists(result_dir):
+    os.makedirs(os.path.join(result_dir, 'png'))
+    os.makedirs(os.path.join(result_dir, 'numpy'))
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-if not os.path.exists(result_dir):
-    os.makedirs(result_dir)
-
-## 네트워크를 구축하기
+## 네트워크 구축하기
 class UNet(nn.Module):
     def __init__(self):
         super(UNet, self).__init__()
@@ -34,7 +40,8 @@ class UNet(nn.Module):
         def CBR2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=True):
             layers = []
             layers += [nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                 kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)]
+                                 kernel_size=kernel_size, stride=stride, padding=padding,
+                                 bias=bias)]
             layers += [nn.BatchNorm2d(num_features=out_channels)]
             layers += [nn.ReLU()]
 
@@ -42,7 +49,7 @@ class UNet(nn.Module):
 
             return cbr
 
-        # Encoder part
+        # Contracting path
         self.enc1_1 = CBR2d(in_channels=1, out_channels=64)
         self.enc1_2 = CBR2d(in_channels=64, out_channels=64)
 
@@ -65,28 +72,34 @@ class UNet(nn.Module):
 
         self.enc5_1 = CBR2d(in_channels=512, out_channels=1024)
 
-        # Decoder part
+        # Expansive path
         self.dec5_1 = CBR2d(in_channels=1024, out_channels=512)
 
-        self.unpool4 = nn.ConvTranspose2d(in_channels=512, out_channels=512, kernel_size=2, stride=2, padding=0, bias=True)
+        self.unpool4 = nn.ConvTranspose2d(in_channels=512, out_channels=512,
+                                          kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec4_2 = CBR2d(in_channels=2*512, out_channels=512)
+        self.dec4_2 = CBR2d(in_channels=2 * 512, out_channels=512)
         self.dec4_1 = CBR2d(in_channels=512, out_channels=256)
 
-        self.unpool3 = nn.ConvTranspose2d(in_channels=256, out_channels=256, kernel_size=2, stride=2, padding=0, bias=True)
+        self.unpool3 = nn.ConvTranspose2d(in_channels=256, out_channels=256,
+                                          kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec3_2 = CBR2d(in_channels=2*256, out_channels=256)
+        self.dec3_2 = CBR2d(in_channels=2 * 256, out_channels=256)
         self.dec3_1 = CBR2d(in_channels=256, out_channels=128)
 
-        self.unpool2 = nn.ConvTranspose2d(in_channels=128, out_channels=128, kernel_size=2, stride=2, padding=0, bias=True)
+        self.unpool2 = nn.ConvTranspose2d(in_channels=128, out_channels=128,
+                                          kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec2_2 = CBR2d(in_channels=2*128, out_channels=128)
+        self.dec2_2 = CBR2d(in_channels=2 * 128, out_channels=128)
         self.dec2_1 = CBR2d(in_channels=128, out_channels=64)
 
-        self.unpool1 = nn.ConvTranspose2d(in_channels=64, out_channels=64, kernel_size=2, stride=2, padding=0, bias=True)
+        self.unpool1 = nn.ConvTranspose2d(in_channels=64, out_channels=64,
+                                          kernel_size=2, stride=2, padding=0, bias=True)
 
-        self.dec1_2 = CBR2d(in_channels=2*64, out_channels=64)
-        self.dec1_1 = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=3, stride=1, padding=1, bias=True)
+        self.dec1_2 = CBR2d(in_channels=2 * 64, out_channels=64)
+        self.dec1_1 = CBR2d(in_channels=64, out_channels=64)
+
+        self.fc = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=1, stride=1, padding=0, bias=True)
 
     def forward(self, x):
         enc1_1 = self.enc1_1(x)
@@ -129,11 +142,11 @@ class UNet(nn.Module):
         dec1_2 = self.dec1_2(cat1)
         dec1_1 = self.dec1_1(dec1_2)
 
-        x = torch.sigmoid(dec1_1)
+        x = self.fc(dec1_1)
 
         return x
 
-## 데이터 로더를 구축하기
+## 데이터 로더를 구현하기
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, data_dir, transform=None):
         self.data_dir = data_dir
@@ -157,23 +170,23 @@ class Dataset(torch.utils.data.Dataset):
         label = np.load(os.path.join(self.data_dir, self.lst_label[index]))
         input = np.load(os.path.join(self.data_dir, self.lst_input[index]))
 
-        label = label / 255.0
-        input = input / 255.0
+        label = label/255.0
+        input = input/255.0
 
         if label.ndim == 2:
             label = label[:, :, np.newaxis]
-
         if input.ndim == 2:
             input = input[:, :, np.newaxis]
 
-        data = {'label': label, 'input': input}
+        data = {'input': input, 'label': label}
 
         if self.transform:
             data = self.transform(data)
 
         return data
 
-## 트렌스폼을 구축하기
+
+## 트렌스폼 구현하기
 class ToTensor(object):
     def __call__(self, data):
         label, input = data['label'], data['input']
@@ -182,16 +195,10 @@ class ToTensor(object):
         input = input.transpose((2, 0, 1)).astype(np.float32)
 
         data = {'label': torch.from_numpy(label), 'input': torch.from_numpy(input)}
+
         return data
 
-
-class ToNumpy(object):
-    def __call__(self, data):
-        data = data.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
-        return data
-
-
-class Normalize(object):
+class Normalization(object):
     def __init__(self, mean=0.5, std=0.5):
         self.mean = mean
         self.std = std
@@ -202,41 +209,8 @@ class Normalize(object):
         input = (input - self.mean) / self.std
 
         data = {'label': label, 'input': input}
+
         return data
-
-
-class Denormalize(object):
-    def __init__(self, mean=0.5, std=0.5):
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, data):
-        data = (data * self.std) + self.mean
-        return data
-
-
-class RandomCrop(object):
-    def __init__(self, patch_size):
-        self.patch_size = patch_size
-
-    def __call__(self, data):
-        label, input = data['label'], data['input']
-
-        h, w = label.shape[:2]
-        new_h, new_w = self.patch_size
-
-        top = np.random.randint(0, h - new_h)
-        left = np.random.randint(0, w - new_w)
-
-        id_y = np.arange(top, top + new_h, 1)[:, np.newaxis].astype(np.int32)
-        id_x = np.arange(left, left + new_w, 1).astype(np.int32)
-
-        label = label[id_y, id_x]
-        input = input[id_y, id_x]
-
-        data = {'label': label, 'input': input}
-        return data
-
 
 class RandomFlip(object):
     def __call__(self, data):
@@ -251,24 +225,50 @@ class RandomFlip(object):
             input = np.flipud(input)
 
         data = {'label': label, 'input': input}
+
         return data
 
 
-## 네트워크를 저장하거나 불러오는 함수를 구축하기
+## 네트워크 학습하기
+transform = transforms.Compose([Normalization(mean=0.5, std=0.5), ToTensor()])
+
+dataset_test = Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
+loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8)
+
+## 네트워크 생성하기
+net = UNet().to(device)
+
+## 손실함수 정의하기
+fn_loss = nn.BCEWithLogitsLoss().to(device)
+
+## Optimizer 설정하기
+optim = torch.optim.Adam(net.parameters(), lr=lr)
+
+## 그밖에 부수적인 variables 설정하기
+num_data_test = len(dataset_test)
+
+num_batch_test = np.ceil(num_data_test / batch_size)
+
+## 그밖에 부수적인 functions 설정하기
+fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
+fn_denorm = lambda x, mean, std: (x * std) + mean
+fn_class = lambda x: 1.0 * (x > 0.5)
+
+## 네트워크 저장하기
 def save(ckpt_dir, net, optim, epoch):
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
 
     torch.save({'net': net.state_dict(), 'optim': optim.state_dict()},
-                './%s/model_epoch%d.pth' % (ckpt_dir, epoch))
+               "./%s/model_epoch%d.pth" % (ckpt_dir, epoch))
 
+## 네트워크 불러오기
 def load(ckpt_dir, net, optim):
     if not os.path.exists(ckpt_dir):
         epoch = 0
         return net, optim, epoch
 
     ckpt_lst = os.listdir(ckpt_dir)
-
     ckpt_lst.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
 
     dict_model = torch.load('./%s/%s' % (ckpt_dir, ckpt_lst[-1]))
@@ -279,36 +279,10 @@ def load(ckpt_dir, net, optim):
 
     return net, optim, epoch
 
-## 학습 시킬 데이터를 불러오기
-transform = transforms.Compose([Normalize(mean=0.5, std=0.5), ToTensor()])
-
-dataset_test = Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
-loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=0)
-
-num_data_test = len(dataset_test)
-num_batch_test = np.ceil(num_data_test / batch_size)
-
-## 네트워크를 생성하기
-net = UNet().to(device)
-params = net.parameters()
-
-## 손실함수를 정의하기
-fn_loss = nn.BCELoss().to(device)
-
-fn_tonumpy = ToNumpy()
-fn_denorm = Denormalize(mean=0.5, std=0.5)
-fn_class = lambda x: 1.0 * (x > 0.5)
-
-optim = torch.optim.Adam(params, lr=lr)
-
-writer_train = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
-writer_val = SummaryWriter(log_dir=os.path.join(log_dir, 'val'))
-
-## 학습된 네트워크를 불러오기
+## 네트워크 학습시키기
 st_epoch = 0
 net, optim, st_epoch = load(ckpt_dir=ckpt_dir, net=net, optim=optim)
 
-## 트레이닝을 시작하기
 with torch.no_grad():
     net.eval()
     loss_arr = []
@@ -320,31 +294,52 @@ with torch.no_grad():
 
         output = net(input)
 
-        # backward pass
-        # optim.zero_grad()
-
+        # 손실함수 계산하기
         loss = fn_loss(output, label)
-        # loss.backward()
 
-        # optim.step()
-
-        # 손실함수 계산
         loss_arr += [loss.item()]
 
-        print('TEST: BATCH %04d/%04d | LOSS %.4f' %
+        print("TEST: BATCH %04d / %04d | LOSS %.4f" %
               (batch, num_batch_test, np.mean(loss_arr)))
 
+        # Tensorboard 저장하기
         label = fn_tonumpy(label)
-        input = fn_tonumpy(fn_denorm(input))
+        input = fn_tonumpy(fn_denorm(input, mean=0.5, std=0.5))
         output = fn_tonumpy(fn_class(output))
-
-        label = np.clip(label, 0, 1)
-        input = np.clip(input, 0, 1)
-        output = np.clip(output, 0, 1)
 
         for j in range(label.shape[0]):
             id = num_batch_test * (batch - 1) + j
 
-            plt.imsave(os.path.join(result_dir, 'label_%04d.png' % id), label[j, :, :, :].squeeze(), cmap='gray')
-            plt.imsave(os.path.join(result_dir, 'input_%04d.png' % id), input[j, :, :, :].squeeze(), cmap='gray')
-            plt.imsave(os.path.join(result_dir, 'output_%04d.png' % id), output[j, :, :, :].squeeze(), cmap='gray')
+            plt.imsave(os.path.join(result_dir, 'png', 'label_%04d.png' % id), label[j].squeeze(), cmap='gray')
+            plt.imsave(os.path.join(result_dir, 'png', 'input_%04d.png' % id), input[j].squeeze(), cmap='gray')
+            plt.imsave(os.path.join(result_dir, 'png', 'output_%04d.png' % id), output[j].squeeze(), cmap='gray')
+
+            np.save(os.path.join(result_dir, 'numpy', 'label_%04d.npy' % id), label[j].squeeze())
+            np.save(os.path.join(result_dir, 'numpy', 'input_%04d.npy' % id), input[j].squeeze())
+            np.save(os.path.join(result_dir, 'numpy', 'output_%04d.npy' % id), output[j].squeeze())
+
+print("AVERAGE TEST: BATCH %04d / %04d | LOSS %.4f" %
+      (batch, num_batch_test, np.mean(loss_arr)))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
